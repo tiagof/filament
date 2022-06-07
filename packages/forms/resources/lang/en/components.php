@@ -235,13 +235,13 @@ return [
 
             'row' => [
                 'add' => [
-                    'label' => 'Add Row'
+                    'label' => 'Add Row',
                 ],
             ],
 
             'column' => [
                 'add' => [
-                    'label' => 'Add Column'
+                    'label' => 'Add Column',
                 ],
             ],
 

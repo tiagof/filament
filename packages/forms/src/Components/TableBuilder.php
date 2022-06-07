@@ -33,7 +33,6 @@ class TableBuilder extends Field
         $this->addRowButtonLabel(__('forms::components.table_builder.buttons.row.add.label'));
 
         $this->addColumnButtonLabel(__('forms::components.table_builder.buttons.column.add.label'));
-
     }
 
     public function addRowButtonLabel(string | Closure | null $label): static
