@@ -7,12 +7,14 @@ use Filament\Facades\Filament;
 use Filament\Forms;
 use Filament\Http\Livewire\Concerns\CanNotify;
 use Filament\Navigation\NavigationItem;
+use Filament\Tables\Contracts\RendersFormComponentActionModal;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Livewire\Component;
 
-class Page extends Component implements Forms\Contracts\HasForms
+class Page extends Component implements Forms\Contracts\HasForms, RendersFormComponentActionModal
 {
     use CanNotify;
     use Concerns\HasActions;
@@ -35,7 +37,11 @@ class Page extends Component implements Forms\Contracts\HasForms
 
     protected static string $view;
 
-    protected static string | array  $middlewares = [];
+    protected static string | array $middlewares = [];
+
+    public static ?Closure $reportValidationErrorUsing = null;
+
+    protected ?string $maxContentWidth = null;
 
     public static function registerNavigationItems(): void
     {
@@ -139,9 +145,9 @@ class Page extends Component implements Forms\Contracts\HasForms
         return static::getUrl();
     }
 
-    protected function getActions(): array | View | null
+    protected function getActions(): array
     {
-        return null;
+        return [];
     }
 
     protected function getFooter(): ?View
@@ -177,11 +183,17 @@ class Page extends Component implements Forms\Contracts\HasForms
             ->title();
     }
 
+    protected function getMaxContentWidth(): ?string
+    {
+        return $this->maxContentWidth;
+    }
+
     protected function getLayoutData(): array
     {
         return [
             'breadcrumbs' => $this->getBreadcrumbs(),
             'title' => $this->getTitle(),
+            'maxContentWidth' => $this->getMaxContentWidth(),
         ];
     }
 
@@ -193,5 +205,14 @@ class Page extends Component implements Forms\Contracts\HasForms
     protected static function shouldRegisterNavigation(): bool
     {
         return static::$shouldRegisterNavigation;
+    }
+
+    protected function onValidationError(ValidationException $exception): void
+    {
+        if (! static::$reportValidationErrorUsing) {
+            return;
+        }
+
+        (static::$reportValidationErrorUsing)($exception);
     }
 }

@@ -5,7 +5,9 @@ namespace Filament\Resources;
 use Closure;
 use Filament\Facades\Filament;
 use Filament\GlobalSearch\GlobalSearchResult;
+use function Filament\locale_has_pluralization;
 use Filament\Navigation\NavigationItem;
+use function Filament\Support\get_model_label;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -21,7 +23,12 @@ class Resource
 
     protected static bool $isGloballySearchable = true;
 
+    /**
+     * @deprecated Use `$modelLabel` instead.
+     */
     protected static ?string $label = null;
+
+    protected static ?string $modelLabel = null;
 
     protected static ?string $model = null;
 
@@ -37,7 +44,12 @@ class Resource
 
     protected static bool $shouldRegisterNavigation = true;
 
+    /**
+     * @deprecated Use `$pluralModelLabel` instead.
+     */
     protected static ?string $pluralLabel = null;
+
+    protected static ?string $pluralModelLabel = null;
 
     protected static ?string $recordTitleAttribute = null;
 
@@ -86,8 +98,8 @@ class Resource
 
     public static function resolveRecordRouteBinding($key): ?Model
     {
-        return static::getEloquentQuery()
-            ->where(static::getRecordRouteKeyName(), $key)
+        return app(static::getModel())
+            ->resolveRouteBindingQuery(static::getEloquentQuery(), $key, static::getRecordRouteKeyName())
             ->first();
     }
 
@@ -127,6 +139,31 @@ class Resource
         return static::can('deleteAny');
     }
 
+    public static function canForceDelete(Model $record): bool
+    {
+        return static::can('forceDelete', $record);
+    }
+
+    public static function canForceDeleteAny(): bool
+    {
+        return static::can('forceDeleteAny');
+    }
+
+    public static function canReplicate(Model $record): bool
+    {
+        return static::can('replicate', $record);
+    }
+
+    public static function canRestore(Model $record): bool
+    {
+        return static::can('restore', $record);
+    }
+
+    public static function canRestoreAny(): bool
+    {
+        return static::can('restoreAny');
+    }
+
     public static function canGloballySearch(): bool
     {
         return static::$isGloballySearchable && count(static::getGloballySearchableAttributes()) && static::canViewAny();
@@ -139,7 +176,7 @@ class Resource
 
     public static function getBreadcrumb(): string
     {
-        return static::$breadcrumb ?? Str::title(static::getPluralLabel());
+        return static::$breadcrumb ?? Str::headline(static::getPluralModelLabel());
     }
 
     public static function getEloquentQuery(): Builder
@@ -170,11 +207,11 @@ class Resource
 
     public static function getGlobalSearchResultUrl(Model $record): ?string
     {
-        if (static::canEdit($record)) {
+        if (static::hasPage('edit') && static::canEdit($record)) {
             return static::getUrl('edit', ['record' => $record]);
         }
 
-        if (static::canView($record)) {
+        if (static::hasPage('view') && static::canView($record)) {
             return static::getUrl('view', ['record' => $record]);
         }
 
@@ -198,18 +235,33 @@ class Resource
         return $query
             ->limit(50)
             ->get()
-            ->map(fn (Model $record): GlobalSearchResult => new GlobalSearchResult(
-                title: static::getGlobalSearchResultTitle($record),
-                url: static::getGlobalSearchResultUrl($record),
-                details: static::getGlobalSearchResultDetails($record),
-            ));
+            ->map(function (Model $record): ?GlobalSearchResult {
+                $url = static::getGlobalSearchResultUrl($record);
+
+                if (blank($url)) {
+                    return null;
+                }
+
+                return new GlobalSearchResult(
+                    title: static::getGlobalSearchResultTitle($record),
+                    url: $url,
+                    details: static::getGlobalSearchResultDetails($record),
+                );
+            })
+            ->filter();
     }
 
-    public static function getLabel(): string
+    /**
+     * @deprecated Use `getModelLabel()` instead.
+     */
+    public static function getLabel(): ?string
     {
-        return static::$label ?? (string) Str::of(class_basename(static::getModel()))
-            ->kebab()
-            ->replace('-', ' ');
+        return static::$label;
+    }
+
+    public static function getModelLabel(): string
+    {
+        return static::$modelLabel ?? static::getLabel() ?? get_model_label(static::getModel());
     }
 
     public static function getModel(): string
@@ -224,9 +276,25 @@ class Resource
         return [];
     }
 
-    public static function getPluralLabel(): string
+    /**
+     * @deprecated Use `getPluralModelLabel()` instead.
+     */
+    public static function getPluralLabel(): ?string
     {
-        return static::$pluralLabel ?? Str::plural(static::getLabel());
+        return static::$pluralLabel;
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        if (filled($label = static::$pluralModelLabel ?? static::getPluralLabel())) {
+            return $label;
+        }
+
+        if (locale_has_pluralization()) {
+            return Str::plural(static::getModelLabel());
+        }
+
+        return static::getModelLabel();
     }
 
     public static function getRecordTitleAttribute(): ?string
@@ -236,7 +304,7 @@ class Resource
 
     public static function getRecordTitle(?Model $record): ?string
     {
-        return $record?->getAttribute(static::getRecordTitleAttribute()) ?? $record?->getKey();
+        return $record?->getAttribute(static::getRecordTitleAttribute()) ?? static::getModelLabel();
     }
 
     public static function getRelations(): array
@@ -256,9 +324,9 @@ class Resource
         return "filament.resources.{$slug}";
     }
 
-    public static function getRecordRouteKeyName(): string
+    public static function getRecordRouteKeyName(): ?string
     {
-        return static::$recordRouteKeyName ?? app(static::getModel())->getRouteKeyName();
+        return static::$recordRouteKeyName;
     }
 
     public static function getRoutes(): Closure
@@ -284,10 +352,21 @@ class Resource
 
     public static function getSlug(): string
     {
-        return static::$slug ?? (string) Str::of(class_basename(static::getModel()))
-            ->plural()
-            ->kebab()
-            ->slug();
+        if (filled(static::$slug)) {
+            return static::$slug;
+        }
+
+        $slug = Str::of(static::getModel())
+            ->afterLast('\\Models\\')
+            ->explode('\\')
+            ->map(fn (string $string) => Str::of($string)->kebab()->slug())
+            ->implode('/');
+
+        if (locale_has_pluralization()) {
+            $slug = Str::plural($slug);
+        }
+
+        return $slug;
     }
 
     public static function getUrl($name = 'index', $params = []): string
@@ -351,14 +430,24 @@ class Resource
         return static::$navigationGroup;
     }
 
+    public static function navigationGroup(?string $group): void
+    {
+        static::$navigationGroup = $group;
+    }
+
     protected static function getNavigationIcon(): string
     {
         return static::$navigationIcon ?? 'heroicon-o-collection';
     }
 
+    public static function navigationIcon(?string $icon): void
+    {
+        static::$navigationIcon = $icon;
+    }
+
     protected static function getNavigationLabel(): string
     {
-        return static::$navigationLabel ?? Str::title(static::getPluralLabel());
+        return static::$navigationLabel ?? Str::headline(static::getPluralModelLabel());
     }
 
     protected static function getNavigationBadge(): ?string
@@ -369,6 +458,11 @@ class Resource
     protected static function getNavigationSort(): ?int
     {
         return static::$navigationSort;
+    }
+
+    public static function navigationSort(?int $sort): void
+    {
+        static::$navigationSort = $sort;
     }
 
     protected static function getNavigationUrl(): string

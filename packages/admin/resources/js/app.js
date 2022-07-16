@@ -1,4 +1,4 @@
-import '../css/app.css'
+//import '../css/app.css'
 
 import Alpine from 'alpinejs'
 import Chart from 'chart.js/auto'
@@ -6,12 +6,14 @@ import Chart from 'chart.js/auto'
 import Collapse from '@alpinejs/collapse'
 import FormsAlpinePlugin from '../../../forms/dist/module.esm'
 import Focus from '@alpinejs/focus'
+import Mousetrap from '@danharrin/alpine-mousetrap'
 import Persist from '@alpinejs/persist'
 import Tooltip from '@ryangjchandler/alpine-tooltip'
 
 Alpine.plugin(Collapse)
 Alpine.plugin(FormsAlpinePlugin)
 Alpine.plugin(Focus)
+Alpine.plugin(Mousetrap)
 Alpine.plugin(Persist)
 Alpine.plugin(Tooltip)
 
@@ -38,6 +40,22 @@ Alpine.store('sidebar', {
         this.isOpen = true
     },
 })
+
+Alpine.store(
+    'theme',
+    window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+)
+
+
+window.addEventListener('dark-mode-toggled', (event) => {
+    Alpine.store('theme', event.detail)
+})
+
+window
+    .matchMedia('(prefers-color-scheme: dark)')
+    .addEventListener('change', (event) => {
+        Alpine.store('theme', event.matches ? 'dark' : 'light')
+    })
 
 Chart.defaults.font.family = `'DM Sans', sans-serif`
 Chart.defaults.color = '#6b7280'

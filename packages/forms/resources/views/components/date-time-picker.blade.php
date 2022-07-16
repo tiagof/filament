@@ -23,10 +23,7 @@
         x-data="dateTimePickerFormComponent({
             displayFormat: '{{ convert_date_format($getDisplayFormat())->to('day.js') }}',
             firstDayOfWeek: {{ $getFirstDayOfWeek() }},
-            format: '{{ convert_date_format($getFormat())->to('day.js') }}',
             isAutofocused: {{ $isAutofocused() ? 'true' : 'false' }},
-            maxDate: '{{ $getMaxDate() }}',
-            minDate: '{{ $getMinDate() }}',
             state: $wire.{{ $applyStateBindingModifiers('entangle(\'' . $getStatePath() . '\')') }},
         })"
         x-on:click.away="closePicker()"
@@ -35,6 +32,9 @@
         {{ $attributes->merge($getExtraAttributes())->class(['relative filament-forms-date-time-picker-component']) }}
         {{ $getExtraAlpineAttributeBag() }}
     >
+        <input x-ref="maxDate" type="hidden" value="{{ $getMaxDate() }}" />
+        <input x-ref="minDate" type="hidden" value="{{ $getMinDate() }}" />
+
         <button
             @unless($isDisabled())
                 x-ref="button"
@@ -53,12 +53,14 @@
             @endunless
             type="button"
             {{ $getExtraTriggerAttributeBag()->class([
-                'bg-white relative w-full border py-2 pl-3 pr-10 rtl:pl-10 rtl:pr-3 text-left cursor-default rounded-lg shadow-sm focus-within:border-primary-600 focus-within:ring-1 focus-within:ring-inset focus-within:ring-primary-600',
+                'bg-white relative w-full border py-2 pl-3 pr-10 rtl:pl-10 rtl:pr-3 text-left cursor-default rounded-lg shadow-sm',
+                'focus-within:ring-1 focus-within:border-primary-600 focus-within:ring-inset focus-within:ring-primary-600' => ! $isDisabled(),
                 'dark:bg-gray-700' => config('forms.dark_mode'),
                 'border-gray-300' => ! $errors->has($getStatePath()),
                 'dark:border-gray-600' => (! $errors->has($getStatePath())) && config('forms.dark_mode'),
                 'border-danger-600' => $errors->has($getStatePath()),
-                'text-gray-500' => $isDisabled(),
+                'opacity-70' => $isDisabled(),
+                'dark:text-gray-300' => $isDisabled() && config('forms.dark_mode'),
             ]) }}
         >
             <input
@@ -69,6 +71,7 @@
                 @class([
                     'w-full h-full p-0 placeholder-gray-400 bg-transparent border-0 focus:placeholder-gray-500 focus:ring-0 focus:outline-none',
                     'dark:bg-gray-700 dark:placeholder-gray-400' => config('forms.dark_mode'),
+                    'cursor-default' => $isDisabled(),
                 ])
             />
 
@@ -91,9 +94,9 @@
                 role="dialog"
                 x-cloak
                 @class([
-                    'absolute z-10 my-1 bg-white border border-gray-300 rounded-lg shadow-sm',
+                    'absolute z-10 my-1 bg-white border border-gray-300 rounded-lg shadow-md',
                     'dark:bg-gray-700 dark:border-gray-600' => config('forms.dark_mode'),
-                    'p-4 w-64' => $hasDate(),
+                    'p-4 min-w-[16rem] w-fit' => $hasDate(),
                 ])
             >
                 <div class="space-y-3">
@@ -154,7 +157,7 @@
                                         'bg-primary-50 @if (config('forms.dark_mode')) dark:bg-primary-100 dark:text-gray-600 @endif': dayIsToday(day) && ! dayIsSelected(day) && focusedDate.date() !== day && ! dayIsDisabled(day),
                                         'bg-primary-200 @if (config('forms.dark_mode')) dark:text-gray-600 @endif': focusedDate.date() === day && ! dayIsSelected(day),
                                         'bg-primary-500 text-white': dayIsSelected(day),
-                                        'cursor-not-allowed': dayIsDisabled(day),
+                                        'cursor-not-allowed pointer-events-none': dayIsDisabled(day),
                                         'opacity-50': focusedDate.date() !== day && dayIsDisabled(day),
                                     }"
                                     x-bind:dusk="'filament.forms.{{ $getStatePath() }}' + '.focusedDate.' + day"

@@ -3,15 +3,23 @@
 namespace Filament;
 
 use Filament\Facades\Filament;
+use Filament\Facades\FilamentNotification;
 use Filament\Http\Livewire\Auth\Login;
 use Filament\Http\Livewire\GlobalSearch;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Http\Middleware\MirrorConfigToSubpackages;
+use Filament\Http\Responses\Auth\Contracts\LoginResponse as LoginResponseContract;
 use Filament\Http\Responses\Auth\Contracts\LogoutResponse as LogoutResponseContract;
+use Filament\Http\Responses\Auth\LoginResponse;
 use Filament\Http\Responses\Auth\LogoutResponse;
 use Filament\Pages\Dashboard;
 use Filament\Pages\Page;
 use Filament\Resources\Resource;
+use Filament\Tables\Actions\Action as TableAction;
+use Filament\Tables\Actions\BulkAction as TableBulkAction;
+use Filament\Tables\Actions\ButtonAction;
+use Filament\Tables\Actions\IconButtonAction;
+use Filament\Testing\TestsPages;
 use Filament\Widgets\AccountWidget;
 use Filament\Widgets\FilamentInfoWidget;
 use Filament\Widgets\Widget;
@@ -20,6 +28,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Livewire\Component;
 use Livewire\Livewire;
+use Livewire\Testing\TestableLivewire;
 use ReflectionClass;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
@@ -45,7 +54,9 @@ class FilamentServiceProvider extends PackageServiceProvider
             Commands\MakeHasManyCommand::class,
             Commands\MakeHasManyThroughCommand::class,
             Commands\MakeMorphManyCommand::class,
+            Commands\MakeMorphToManyCommand::class,
             Commands\MakePageCommand::class,
+            Commands\MakeRelationManagerCommand::class,
             Commands\MakeResourceCommand::class,
             Commands\MakeUserCommand::class,
             Commands\MakeWidgetCommand::class,
@@ -69,22 +80,33 @@ class FilamentServiceProvider extends PackageServiceProvider
 
     public function packageRegistered(): void
     {
-        $this->app->singleton('filament', function (): FilamentManager {
-            return app(FilamentManager::class);
+        $this->app->resolving('filament', function (): void {
+            $this->discoverPages();
+            $this->discoverResources();
+            $this->discoverWidgets();
         });
 
+        $this->app->scoped('filament', function (): FilamentManager {
+            return new FilamentManager();
+        });
+
+        $this->app->scoped(NotificationManager::class, function (): NotificationManager {
+            return new NotificationManager();
+        });
+
+        $this->app->bind(LoginResponseContract::class, LoginResponse::class);
         $this->app->bind(LogoutResponseContract::class, LogoutResponse::class);
 
         $this->mergeConfigFrom(__DIR__ . '/../config/filament.php', 'filament');
-
-        $this->discoverPages();
-        $this->discoverResources();
-        $this->discoverWidgets();
     }
 
     public function packageBooted(): void
     {
         $this->bootLivewireComponents();
+
+        $this->bootTableActionConfiguration();
+
+        TestableLivewire::mixin(new TestsPages());
     }
 
     protected function bootLivewireComponents(): void
@@ -94,9 +116,7 @@ class FilamentServiceProvider extends PackageServiceProvider
             MirrorConfigToSubpackages::class,
         ]);
 
-        Livewire::listen('component.hydrate', function ($component) {
-            $this->app->singleton(Component::class, fn () => $component);
-        });
+        Livewire::listen('component.dehydrate', [FilamentNotification::class, 'handleLivewireResponses']);
 
         Livewire::component('filament.core.auth.login', Login::class);
         Livewire::component('filament.core.global-search', GlobalSearch::class);
@@ -105,6 +125,33 @@ class FilamentServiceProvider extends PackageServiceProvider
         Livewire::component('filament.core.widgets.filament-info-widget', FilamentInfoWidget::class);
 
         $this->registerLivewireComponentDirectory(config('filament.livewire.path'), config('filament.livewire.namespace'), 'filament.');
+    }
+
+    protected function bootTableActionConfiguration(): void
+    {
+        Filament::serving(function (): void {
+            $notify = function (string $status, string $message): void {
+                Filament::notify($status, $message);
+            };
+
+            TableAction::configureUsing(function (TableAction $action) use ($notify): TableAction {
+                match (config('filament.layout.tables.actions.type')) {
+                    ButtonAction::class => $action->button(),
+                    IconButtonAction::class => $action->iconButton(),
+                    default => null,
+                };
+
+                $action->notifyUsing($notify);
+
+                return $action;
+            });
+
+            TableBulkAction::configureUsing(function (TableBulkAction $action) use ($notify): TableBulkAction {
+                $action->notifyUsing($notify);
+
+                return $action;
+            });
+        });
     }
 
     protected function discoverPages(): void

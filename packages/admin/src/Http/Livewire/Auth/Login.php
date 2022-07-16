@@ -10,6 +10,7 @@ use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use Filament\Http\Responses\Auth\Contracts\LoginResponse;
 use Illuminate\Contracts\View\View;
 use Livewire\Component;
 
@@ -22,7 +23,9 @@ class Login extends Component implements HasForms
     use WithRateLimiting;
 
     public $email = '';
+
     public $password = '';
+
     public $remember = false;
 
     public function mount(): void
@@ -34,7 +37,7 @@ class Login extends Component implements HasForms
         $this->form->fill();
     }
 
-    public function authenticate(): void
+    public function authenticate(): ?LoginResponse
     {
         try {
             $this->rateLimit(5);
@@ -44,7 +47,7 @@ class Login extends Component implements HasForms
                 'minutes' => ceil($exception->secondsUntilAvailable / 60),
             ]));
 
-            return;
+            return null;
         }
 
         $data = $this->form->getState();
@@ -55,10 +58,10 @@ class Login extends Component implements HasForms
         ], $data['remember'])) {
             $this->addError('email', __('filament::login.messages.failed'));
 
-            return;
+            return null;
         }
 
-        redirect()->intended(Filament::getUrl());
+        return app(LoginResponse::class);
     }
 
     protected function getFormSchema(): array
@@ -81,7 +84,7 @@ class Login extends Component implements HasForms
     public function render(): View
     {
         return view('filament::login')
-            ->layout('filament::components.layouts.base', [
+            ->layout('filament::components.layouts.card', [
                 'title' => __('filament::login.title'),
             ]);
     }

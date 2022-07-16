@@ -11,13 +11,18 @@ trait HasEmptyState
 
     public function cacheTableEmptyStateActions(): void
     {
-        $this->cachedTableEmptyStateActions = collect($this->getTableEmptyStateActions())
-            ->mapWithKeys(function (Action $action): array {
-                $action->table($this->getCachedTable());
+        Action::configureUsing(
+            fn (Action $action): Action => $action->button(),
+            function (): void {
+                $this->cachedTableEmptyStateActions = collect($this->getTableEmptyStateActions())
+                    ->mapWithKeys(function (Action $action): array {
+                        $action->table($this->getCachedTable());
 
-                return [$action->getName() => $action];
-            })
-            ->toArray();
+                        return [$action->getName() => $action];
+                    })
+                    ->toArray();
+            }
+        );
     }
 
     public function getCachedTableEmptyStateActions(): array
@@ -27,7 +32,7 @@ trait HasEmptyState
             ->toArray();
     }
 
-    protected function getCachedTableEmptyStateAction(string $name): ?Action
+    public function getCachedTableEmptyStateAction(string $name): ?Action
     {
         return $this->getCachedTableEmptyStateActions()[$name] ?? null;
     }
